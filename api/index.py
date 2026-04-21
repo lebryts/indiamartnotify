@@ -111,13 +111,28 @@ def run_cron():
     try:
         add_log("Starting scan...")
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": "https://trade.indiamart.com",
+            "Referer": "https://trade.indiamart.com/buyersearch.mp?ss=cocopeat+block"
         }
         payload = {"source": "eto.search.lead", "q": SEARCH_QUERY, "options.start": 0, "options.results": 20}
         
         response = requests.post(INDIAMART_URL, data=payload, headers=headers, timeout=15)
-        data = response.json()
+        
+        if response.status_code != 200:
+            add_log(f"IndiaMart Error {response.status_code}. Possible block.")
+            return f"IndiaMart blocked the request (Status {response.status_code})", response.status_code
+
+        try:
+            data = response.json()
+        except:
+            add_log("Error: IndiaMart sent HTML instead of Data. Being blocked.")
+            return "IndiaMart Blocked (HTML received)", 500
+
         results = data.get("results", [])
         add_log(f"Found {len(results)} leads.")
         
