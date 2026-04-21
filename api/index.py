@@ -96,48 +96,6 @@ def parse_value(val_str):
     if not numbers: return 0
     return max([float(n[0]) for n in numbers]) * multiplier
 
-@app.route('/api/push_leads', methods=['POST'])
-def push_leads():
-    data = request.json
-    results = data.get("leads", [])
-    
-    if r.get("monitor_status") != "true":
-        return "Monitor is OFF", 200
-
-    min_val_limit = int(r.get("config_min_value") or 300000)
-    min_qty_limit = int(r.get("config_min_qty_kg") or 10000)
-    ntfy_topic = r.get("ntfy_topic")
-    
-    matches_found = 0
-    for lead in results:
-        # Leads pushed from browser might have different structure, 
-        # but let's assume it matches our target for now or we will map it in JS
-        display_id = lead.get("displayid")
-        if not display_id or r.sismember("seen_leads", display_id): continue
-            
-        total_qty = lead.get("qty", 0)
-        max_value = lead.get("value", 0)
-
-        matches_qty = (min_qty_limit > 0 and total_qty >= min_qty_limit)
-        matches_val = (min_val_limit > 0 and max_value >= min_val_limit)
-
-        if matches_qty or matches_val:
-            title = lead.get("title", "Lead")
-            city = lead.get("city", "Unknown")
-            isq = lead.get("details", [])
-            details_all = "\n".join([f"- {d}" for d in isq])
-            msg = f"Product: {title}\nLocation: {city}\nQty: {total_qty} KG\nValue: Rs. {max_value:,.0f}\n\n{details_all}"
-            requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "MATCH!", "Priority": "high"})
-            matches_found += 1
-            add_log(f"Browser Match: {title}")
-
-        r.sadd("seen_leads", display_id)
-
-    if matches_found > 0:
-        add_log(f"Pushed {len(results)} leads. {matches_found} matches notified.")
-    r.set("last_check_time", datetime.now().strftime('%H:%M:%S'))
-    return jsonify({"success": True, "matches": matches_found})
-
 @app.route('/api/cron', methods=['GET'])
 def run_cron():
     secret_key = os.environ.get("CRON_SECRET")
