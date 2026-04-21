@@ -130,7 +130,11 @@ def run_cron():
                 if "quantity" in detail.lower(): total_qty = parse_quantity(detail)
                 if "value" in detail.lower(): max_value = parse_value(detail)
 
-            if total_qty >= min_qty_limit or max_value >= min_val_limit:
+            # Smart Filtering Logic: Only filter by categories that have a limit > 0
+            matches_qty = (min_qty_limit > 0 and total_qty >= min_qty_limit)
+            matches_val = (min_val_limit > 0 and max_value >= min_val_limit)
+
+            if matches_qty or matches_val:
                 title = fields.get("title", "Lead")
                 city = fields.get("city", "Unknown")
                 details_all = "\n".join([f"- {d}" for d in isq])

@@ -20,6 +20,8 @@ class LeadMonitor:
         self.is_running = False
         self.seen_leads = set()
         self.last_status = "Initialized"
+        self.min_value = 300000
+        self.min_qty_kg = 10000
 
     def parse_quantity(self, qty_str):
         """Extracts quantity in KG from string like 'Quantity:20 Kg' or '10 Tonne'"""
@@ -112,9 +114,9 @@ class LeadMonitor:
             if "value" in detail.lower():
                 max_value = self.parse_value(detail)
 
-        # Filtering Logic
-        matches_qty = total_qty >= MIN_QUANTITY_KG
-        matches_val = max_value >= MIN_VALUE
+        # Smart Filtering Logic
+        matches_qty = (self.min_qty_kg > 0 and total_qty >= self.min_qty_kg)
+        matches_val = (self.min_value > 0 and max_value >= self.min_value)
         
         if matches_qty or matches_val:
             print(f"MATCH FOUND: {title} in {city}")
