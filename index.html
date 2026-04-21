@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>IndiaMart Lead Notifier</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-glow: rgba(79, 70, 229, 0.4);
+            --success: #22c55e;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(at 0% 0%, rgba(79, 70, 229, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 2rem;
+            padding: 2.5rem 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin: 0 0 0.5rem 0;
+            background: linear-gradient(to right, #818cf8, #34d399);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            margin-bottom: 2.5rem;
+            font-size: 0.9rem;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+        }
+
+        .status-badge.active {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .status-badge.inactive {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .pwa-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 2rem auto;
+            position: relative;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: #1e293b;
+            box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.05), 0 10px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .pwa-button.active {
+            background: var(--primary);
+            box-shadow: 0 0 30px var(--primary-glow), inset 0 2px 4px rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+
+        .pwa-button i {
+            width: 48px;
+            height: 48px;
+            color: white;
+            transition: all 0.3s ease;
+        }
+
+        .pwa-button.active i {
+            filter: drop-shadow(0 0 8px white);
+        }
+
+        .pulse {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: var(--primary);
+            opacity: 0;
+            z-index: -1;
+        }
+
+        .active .pulse {
+            animation: pulse-ring 2s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.95);
+                opacity: 0.5;
+            }
+
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+            text-align: left;
+        }
+
+        .info-item {
+            background: rgba(255, 255, 255, 0.03);
+            padding: 1rem;
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .info-label {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .ntfy-box {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(79, 70, 229, 0.1);
+            border-radius: 1rem;
+            border: 1px dashed var(--primary);
+            font-size: 0.8rem;
+        }
+
+        .copy-link {
+            display: block;
+            margin-top: 0.5rem;
+            color: #818cf8;
+            text-decoration: none;
+            font-weight: 600;
+            word-break: break-all;
+        }
+
+        .loader {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading .loader {
+            display: block;
+        }
+
+        .loading i {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="card" id="mainCard">
+            <h1>Lead Notifier</h1>
+            <p class="subtitle">IndiaMart Monitoring: Cocopeat</p>
+
+            <div id="statusBadge" class="status-badge inactive">
+                <div class="pulse-dot"></div>
+                <span id="statusText">Monitoring Off</span>
+            </div>
+
+            <button id="toggleBtn" class="pwa-button">
+                <i data-lucide="power"></i>
+                <div class="loader"></div>
+                <div class="pulse"></div>
+            </button>
+
+            <div class="info-grid">
+                <div class="info-item">
+                    <span class="info-label">Min Value</span>
+                    <span class="info-value">3.0 Lakh</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Min Qty</span>
+                    <span class="info-value">10 Ton</span>
+                </div>
+            </div>
+
+            <div class="ntfy-box">
+                <strong>Setup Notifications:</strong>
+                <p>Install <strong>ntfy</strong> app on your phone and subscribe to:</p>
+                <code id="topicLabel" class="copy-link">loading...</code>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+        let isRunning = false;
+
+        async function updateStatus() {
+            try {
+                const res = await fetch(`${API_URL}/status`);
+                const data = await res.json();
+
+                isRunning = data.isRunning;
+                document.getElementById('statusText').innerText = isRunning ? 'Monitoring Active' : 'Monitoring Off';
+                document.getElementById('statusBadge').className = `status-badge ${isRunning ? 'active' : 'inactive'}`;
+                document.getElementById('toggleBtn').className = `pwa-button ${isRunning ? 'active' : ''}`;
+                document.getElementById('topicLabel').innerText = data.ntfyTopic;
+
+                // Redraw icons
+                lucide.createIcons();
+            } catch (e) {
+                console.error("Failed to fetch status", e);
+            }
+        }
+
+        document.getElementById('toggleBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('toggleBtn');
+            btn.classList.add('loading');
+
+            try {
+                const res = await fetch(`${API_URL}/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enable: !isRunning })
+                });
+                const data = await res.json();
+                isRunning = data.isRunning;
+                await updateStatus();
+            } catch (e) {
+                alert("Error connecting to backend");
+            } finally {
+                btn.classList.remove('loading');
+            }
+        });
+
+        // Initial load
+        updateStatus();
+        setInterval(updateStatus, 5000);
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
