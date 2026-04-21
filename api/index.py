@@ -17,6 +17,14 @@ r = redis.from_url(os.environ.get('REDIS_URL'), decode_responses=True)
 SEARCH_QUERY = "cocopeat block"
 INDIAMART_URL = "https://trade.indiamart.com/tradereact/searchpage"
 
+@app.route('/', methods=['GET'])
+def home():
+    try:
+        with open('index.html', 'r') as f:
+            return f.read(), 200, {'Content-Type': 'text/html'}
+    except:
+        return "Dashboard file not found", 404
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     try:
