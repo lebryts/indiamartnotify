@@ -104,7 +104,13 @@ def run_cron():
         headers = {
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
             "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Referer": "https://m.indiamart.com/bl/search.php?s=cocopeat+block"
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": "https://m.indiamart.com/bl/search.php?s=cocopeat+block",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "Priority": "u=1, i",
+            "X-Requested-With": "XMLHttpRequest"
         }
         
         cookie = os.environ.get("INDIAMART_COOKIE")
