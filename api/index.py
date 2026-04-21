@@ -10,7 +10,6 @@ app = Flask(__name__)
 CORS(app)
 
 # Connect to Redis using the REDIS_URL provided by Vercel
-# decode_responses=True makes it return strings instead of bytes
 r = redis.from_url(os.environ.get('REDIS_URL'), decode_responses=True)
 
 # IndiaMart Constants
@@ -25,23 +24,29 @@ def home():
     except:
         return "Dashboard file not found", 404
 
+def add_log(msg):
+    log_entry = f"{datetime.now().strftime('%H:%M:%S')} - {msg}"
+    r.lpush("monitor_logs", log_entry)
+    r.ltrim("monitor_logs", 0, 19) # Keep last 20 logs
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     try:
         is_running = r.get("monitor_status") == "true"
         last_check = r.get("last_check_time") or "Never"
+        logs = r.lrange("monitor_logs", 0, -1)
         
-        # Get dynamic config or use defaults
         min_value = int(r.get("config_min_value") or 300000)
         min_qty_kg = int(r.get("config_min_qty_kg") or 10000)
         
     except Exception as e:
-        return jsonify({"error": "Redis not connected", "details": str(e)}), 500
+        return jsonify({"error": "Redis error", "details": str(e)}), 500
 
     return jsonify({
         "isRunning": is_running,
         "lastStatus": f"Last checked: {last_check}",
         "ntfyTopic": r.get("ntfy_topic") or "configure_me",
+        "logs": logs,
         "config": {
             "minValue": min_value,
             "minQtyKg": min_qty_kg
@@ -53,12 +58,10 @@ def update_config():
     data = request.json
     min_value = data.get('minValue')
     min_qty_kg = data.get('minQtyKg')
-    
     if min_value is not None:
         r.set("config_min_value", str(min_value))
     if min_qty_kg is not None:
         r.set("config_min_qty_kg", str(min_qty_kg))
-        
     return jsonify({"success": True})
 
 @app.route('/api/toggle', methods=['POST'])
@@ -102,28 +105,24 @@ def run_cron():
     if r.get("monitor_status") != "true":
         return "Monitor is OFF", 200
 
-    # Get dynamic config
     min_val_limit = int(r.get("config_min_value") or 300000)
     min_qty_limit = int(r.get("config_min_qty_kg") or 10000)
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "Referer": "https://trade.indiamart.com/buyersearch.mp?ss=cocopeat+block"
-    }
-    
-    payload = {
-        "source": "eto.search.lead",
-        "q": SEARCH_QUERY,
-        "options.start": 0,
-        "options.results": 20
-    }
-
     try:
+        add_log("Starting scan...")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+        }
+        payload = {"source": "eto.search.lead", "q": SEARCH_QUERY, "options.start": 0, "options.results": 20}
+        
         response = requests.post(INDIAMART_URL, data=payload, headers=headers, timeout=15)
         data = response.json()
         results = data.get("results", [])
+        add_log(f"Found {len(results)} leads.")
+        
         ntfy_topic = r.get("ntfy_topic")
+        matches_found = 0
         
         for lead in results:
             fields = lead.get("fields", {})
@@ -137,7 +136,6 @@ def run_cron():
                 if "quantity" in detail.lower(): total_qty = parse_quantity(detail)
                 if "value" in detail.lower(): max_value = parse_value(detail)
 
-            # Smart Filtering Logic: Only filter by categories that have a limit > 0
             matches_qty = (min_qty_limit > 0 and total_qty >= min_qty_limit)
             matches_val = (min_val_limit > 0 and max_value >= min_val_limit)
 
@@ -146,13 +144,17 @@ def run_cron():
                 city = fields.get("city", "Unknown")
                 details_all = "\n".join([f"- {d}" for d in isq])
                 msg = f"Product: {title}\nLocation: {city}\nQty: {total_qty} KG\nValue: Rs. {max_value:,.0f}\n\n{details_all}"
-                requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "Lead Match!", "Priority": "high"})
+                requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "MATCH!", "Priority": "high"})
+                matches_found += 1
+                add_log(f"Match sent: {title}")
 
             r.sadd("seen_leads", display_id)
 
-        r.set("last_check_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+        add_log(f"Scan complete. {matches_found} notifications sent.")
+        r.set("last_check_time", datetime.now().strftime('%H:%M:%S'))
         return "OK", 200
     except Exception as e:
+        add_log(f"Scan error: {str(e)}")
         return f"Error: {str(e)}", 500
 
 if __name__ == '__main__':
