@@ -119,6 +119,15 @@ def run_cron():
             "Origin": "https://trade.indiamart.com",
             "Referer": "https://trade.indiamart.com/buyersearch.mp?ss=cocopeat+block"
         }
+        
+        # Add session cookie if provided to bypass blocks
+        cookie = os.environ.get("INDIAMART_COOKIE")
+        if cookie:
+            headers["Cookie"] = cookie
+            add_log("Using session cookie for bypass.")
+        else:
+            add_log("Warning: No cookie set. High risk of block.")
+
         payload = {"source": "eto.search.lead", "q": SEARCH_QUERY, "options.start": 0, "options.results": 20}
         
         response = requests.post(INDIAMART_URL, data=payload, headers=headers, timeout=15)
