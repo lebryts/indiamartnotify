@@ -71,6 +71,13 @@ def toggle_monitor():
         r.set("ntfy_topic", f"indiamart_cocopeat_{uuid.uuid4().hex[:8]}")
     return jsonify({"isRunning": enable})
 
+@app.route('/api/test_notify', methods=['POST'])
+def test_notify():
+    ntfy_topic = r.get("ntfy_topic")
+    if ntfy_topic:
+        requests.post(f"https://ntfy.sh/{ntfy_topic}", data="Vercel Cloud Test: Your notification system is working!".encode('utf-8'), headers={"Title": "Cloud Test", "Priority": "high"})
+    return jsonify({"success": True})
+
 def parse_quantity(qty_str):
     qty_str = qty_str.lower().replace("quantity:", "").strip()
     match = re.search(r"(\d+(\.\d+)?)", qty_str)

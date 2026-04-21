@@ -282,6 +282,9 @@
                     </div>
                 </div>
                 <button id="saveConfigBtn" class="save-btn">Save Configuration</button>
+                <button id="testNotifyBtn" class="save-btn"
+                    style="background: #1e293b; border: 1px solid var(--primary); margin-top: 0.5rem;">Test
+                    Notifications</button>
             </div>
 
             <div class="ntfy-box">
@@ -362,6 +365,19 @@
                 btn.innerText = 'Save Configuration';
                 btn.disabled = false;
                 updateStatus();
+            }
+        });
+
+        document.getElementById('testNotifyBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('testNotifyBtn');
+            btn.innerText = 'Sending Test...';
+            try {
+                await fetch(`${API_URL}/test_notify`, { method: 'POST' });
+                alert("Test notification sent! Check your phone.");
+            } catch (e) {
+                alert("Error sending test notification");
+            } finally {
+                btn.innerText = 'Test Notifications';
             }
         });
 
