@@ -2,6 +2,9 @@ import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from upstash_redis import Redis
+import requests
+import re
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -9,11 +12,20 @@ CORS(app)
 # Connect to Redis
 redis = Redis.from_env()
 
+# IndiaMart Constants
+SEARCH_QUERY = "cocopeat block"
+INDIAMART_URL = "https://trade.indiamart.com/tradereact/searchpage"
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     try:
         is_running = redis.get("monitor_status") == "true"
         last_check = redis.get("last_check_time") or "Never"
+        
+        # Get dynamic config or use defaults
+        min_value = int(redis.get("config_min_value") or 300000)
+        min_qty_kg = int(redis.get("config_min_qty_kg") or 10000)
+        
     except Exception as e:
         return jsonify({"error": "KV not configured", "details": str(e)}), 500
 
@@ -22,34 +34,33 @@ def get_status():
         "lastStatus": f"Last checked: {last_check}",
         "ntfyTopic": redis.get("ntfy_topic") or "configure_me",
         "config": {
-            "minValue": 300000,
-            "minQtyKg": 10000
+            "minValue": min_value,
+            "minQtyKg": min_qty_kg
         }
     })
+
+@app.route('/api/config', methods=['POST'])
+def update_config():
+    data = request.json
+    min_value = data.get('minValue')
+    min_qty_kg = data.get('minQtyKg')
+    
+    if min_value is not None:
+        redis.set("config_min_value", str(min_value))
+    if min_qty_kg is not None:
+        redis.set("config_min_qty_kg", str(min_qty_kg))
+        
+    return jsonify({"success": True})
 
 @app.route('/api/toggle', methods=['POST'])
 def toggle_monitor():
     data = request.json
     enable = data.get('enable', False)
-    
     redis.set("monitor_status", "true" if enable else "false")
-    
-    # Generate a topic if not exists
     if not redis.get("ntfy_topic"):
         import uuid
         redis.set("ntfy_topic", f"indiamart_cocopeat_{uuid.uuid4().hex[:8]}")
-        
     return jsonify({"isRunning": enable})
-
-import requests
-import re
-from datetime import datetime
-
-# IndiaMart Constants
-SEARCH_QUERY = "cocopeat block"
-INDIAMART_URL = "https://trade.indiamart.com/tradereact/searchpage"
-MIN_VALUE = 300000
-MIN_QUANTITY_KG = 10000
 
 def parse_quantity(qty_str):
     qty_str = qty_str.lower().replace("quantity:", "").strip()
@@ -68,15 +79,16 @@ def parse_value(val_str):
 
 @app.route('/api/cron', methods=['GET'])
 def run_cron():
-    # Security: Check for a secret key in the URL
-    # Example: /api/cron?key=my_secret_key
     secret_key = os.environ.get("CRON_SECRET")
     if secret_key and request.args.get("key") != secret_key:
         return "Unauthorized", 401
     
-    # Only run if monitoring is enabled
     if redis.get("monitor_status") != "true":
         return "Monitor is OFF", 200
+
+    # Get dynamic config
+    min_val_limit = int(redis.get("config_min_value") or 300000)
+    min_qty_limit = int(redis.get("config_min_qty_kg") or 10000)
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -95,34 +107,27 @@ def run_cron():
         response = requests.post(INDIAMART_URL, data=payload, headers=headers, timeout=15)
         data = response.json()
         results = data.get("results", [])
-        
         ntfy_topic = redis.get("ntfy_topic")
         
         for lead in results:
             fields = lead.get("fields", {})
             display_id = fields.get("displayid")
-            
-            if not display_id or redis.sismember("seen_leads", display_id):
-                continue
+            if not display_id or redis.sismember("seen_leads", display_id): continue
                 
-            # Process lead
             isq = fields.get("isqdetails", [])
             total_qty = 0
             max_value = 0
-            details_text = ""
             for detail in isq:
-                details_text += f"- {detail}\n"
                 if "quantity" in detail.lower(): total_qty = parse_quantity(detail)
                 if "value" in detail.lower(): max_value = parse_value(detail)
 
-            if total_qty >= MIN_QUANTITY_KG or max_value >= MIN_VALUE:
-                # Send Notification
+            if total_qty >= min_qty_limit or max_value >= min_val_limit:
                 title = fields.get("title", "Lead")
                 city = fields.get("city", "Unknown")
-                msg = f"Product: {title}\nLocation: {city}\nQty: {total_qty} KG\nValue: Rs. {max_value:,.0f}\n\n{details_text}"
-                requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "Cocopeat Lead!", "Priority": "high"})
+                details_all = "\n".join([f"- {d}" for d in isq])
+                msg = f"Product: {title}\nLocation: {city}\nQty: {total_qty} KG\nValue: Rs. {max_value:,.0f}\n\n{details_all}"
+                requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "Lead Match!", "Priority": "high"})
 
-            # Mark as seen
             redis.sadd("seen_leads", display_id)
 
         redis.set("last_check_time", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
