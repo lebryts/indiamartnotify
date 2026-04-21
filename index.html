@@ -295,6 +295,17 @@
                 </div>
             </div>
 
+            <div class="ntfy-box" style="border-style: solid; border-color: #fbbf24;">
+                <strong style="color: #fbbf24;">Browser Relay (Bypass Blocks):</strong>
+                <p style="font-size: 0.65rem;">Since IndiaMart blocks servers, use this bookmark in your browser tab:
+                </p>
+                <a id="bookmarklet" href="#"
+                    style="background: #fbbf24; color: black; padding: 0.3rem 0.6rem; border-radius: 0.3rem; font-size: 0.7rem; font-weight: bold; text-decoration: none; display: inline-block;">IndiaMart
+                    Scanner</a>
+                <p style="font-size: 0.6rem; margin-top: 0.5rem;">Drag this to your Bookmarks. Then go to IndiaMart &
+                    click it!</p>
+            </div>
+
             <div class="ntfy-box">
                 <strong>Setup Notifications:</strong>
                 <p>Install <strong>ntfy</strong> app and subscribe to:</p>
@@ -395,7 +406,62 @@
             }
         });
 
+        // Generate Bookmarklet
+        function setupBookmarklet() {
+            const host = window.location.origin;
+            const code = `javascript:(function(){
+                console.log('IndiaMart Scanner Started');
+                async function scan() {
+                    const leads = [];
+                    // This selector works for desktop buyersearch
+                    document.querySelectorAll('.cl_list').forEach(row => {
+                        try {
+                            const title = row.querySelector('.cl_title')?.innerText || 'Lead';
+                            const city = row.querySelector('.cl_city')?.innerText || 'Unknown';
+                            const details = Array.from(row.querySelectorAll('.cl_dtl_isq')).map(d => d.innerText);
+                            const id = row.getAttribute('id') || Math.random().toString();
+                            
+                            // Basic parsing
+                            let qty = 0; let val = 0;
+                            details.forEach(d => {
+                                if(d.toLowerCase().includes('quantity')){
+                                    const m = d.match(/(\\d+(\\.\\d+)?)/);
+                                    if(m) {
+                                        qty = parseFloat(m[1]);
+                                        if(d.toLowerCase().includes('ton') || d.toLowerCase().includes('mt')) qty *= 1000;
+                                    }
+                                }
+                                if(d.toLowerCase().includes('value')){
+                                    const m = d.match(/(\\d+(\\.\\d+)?)/);
+                                    if(m) {
+                                        val = parseFloat(m[1]);
+                                        if(d.toLowerCase().includes('lakh')) val *= 100000;
+                                        if(d.toLowerCase().includes('cr')) val *= 10000000;
+                                    }
+                                }
+                            });
+
+                            leads.push({ displayid: id, title, city, details, qty, value: val });
+                        } catch(e){}
+                    });
+                    
+                    if(leads.length > 0) {
+                        console.log('Pushing ' + leads.length + ' leads to ' + '${host}');
+                        await fetch('${host}/api/push_leads', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({ leads })
+                        });
+                    }
+                }
+                setInterval(() => { location.reload(); }, 120000);
+                setTimeout(scan, 5000);
+            })();`;
+            document.getElementById('bookmarklet').href = code.replace(/\n\s+/g, '');
+        }
+
         // Initial load
+        setupBookmarklet();
         updateStatus();
         setInterval(updateStatus, 10000);
         lucide.createIcons();
