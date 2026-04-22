@@ -173,7 +173,8 @@ def run_cron():
             return f"Error {response.status_code}", 200
 
         data = response.json()
-        results = data.get("data", [])
+        # The API returns results in 'DisplayList' or 'data'
+        results = data.get("DisplayList") or data.get("data") or []
         
         # Diagnostics for "Found 0 leads"
         if not results:
