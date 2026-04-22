@@ -4,6 +4,7 @@ from flask_cors import CORS
 import redis
 import requests
 import re
+import random
 from datetime import datetime
 
 app = Flask(__name__)
@@ -110,34 +111,48 @@ def run_cron():
 
     try:
         add_log(f"Scanning for: {search_query}")
+        
+        user_agents = [
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
+        ]
+
         headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+            "User-Agent": random.choice(user_agents),
             "Accept": "application/json, text/javascript, */*; q=0.01",
             "Accept-Language": "en-US,en;q=0.9",
             "Referer": f"https://m.indiamart.com/bl/search.php?s={search_query.replace(' ', '+')}",
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
-            "X-Requested-With": "XMLHttpRequest"
+            "X-Requested-With": "XMLHttpRequest",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache"
         }
         
         cookie = os.environ.get("INDIAMART_COOKIE")
         if cookie:
             headers["Cookie"] = cookie
-            # add_log("Using mobile session cookie.") # Quiet this log to save space
 
         params = {
             "q": search_query,
             "start": 0,
             "rows": 20,
-            "src": "DirectSearch"
+            "src": "DirectSearch",
+            "_": int(datetime.now().timestamp() * 1000) # Anti-cache cachebuster
         }
         
         response = requests.get(MOBILE_API_URL, params=params, headers=headers, timeout=25)
         
+        if response.status_code == 429:
+            add_log("Error 429: Rate Limited! Slow down cron.")
+            return "Rate Limited", 200
+            
         if response.status_code != 200:
             add_log(f"IndiaMart Error {response.status_code}.")
-            return f"Error {response.status_code}", 200 # Return 200 to cron-job.org to avoid 'failure' emails if it's just a temp block
+            return f"Error {response.status_code}", 200
 
         data = response.json()
         # Some responses might be errors wrapped in JSON
