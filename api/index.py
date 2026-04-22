@@ -194,24 +194,23 @@ def run_cron():
             add_log(f"ALL Keys: {list(first_lead.keys())}")
 
         for lead in results:
-            # Try multiple variations for robustness
-            display_id = lead.get("DISPLAY_ID") or lead.get("display_id") or lead.get("DISPLAYID") or lead.get("displayid") or lead.get("QUERY_ID")
+            # Map confirmed fields from diagnostic logs
+            display_id = lead.get("ETO_OFR_ID") or lead.get("DISPLAY_ID") or lead.get("display_id")
             if not display_id or r.sismember("seen_leads", display_id): continue
                 
-            qty_text = str(lead.get("QUANTITY") or lead.get("quantity") or lead.get("eto_ofr_buyer_tot_requirement") or "0")
-            val_text = str(lead.get("PROBABLE_ORDER_VALUE") or lead.get("probable_order_value") or lead.get("ORD_VAL") or "0")
+            qty_text = str(lead.get("eto_ofr_buyer_tot_requirement") or lead.get("ETO_OFR_QTY") or "0")
+            val_text = str(lead.get("ordervalue") or lead.get("PROBABLE_ORDER_VALUE") or "0")
             
             total_qty = parse_quantity(qty_text)
             max_value = parse_value(val_text)
 
             # Match if it meets either requirement
-            # If limit is 0, that filter is effectively disabled (always matches)
             matches_qty = (total_qty >= min_qty_limit)
             matches_val = (max_value >= min_val_limit)
 
             if matches_qty or matches_val:
-                title = lead.get("SUBJECT") or lead.get("subject") or lead.get("ETO_OFR_GLCAT_MCAT_NAME") or "Lead"
-                city = lead.get("CITY") or lead.get("city") or lead.get("GLUSR_CITY") or "Unknown"
+                title = lead.get("ETO_OFR_TITLE") or lead.get("SUBJECT") or lead.get("subject") or "Lead"
+                city = lead.get("GLUSR_CITY") or lead.get("CITY") or "Unknown"
                 msg = f"Product: {title}\nLocation: {city}\nQty: {qty_text}\nValue: {val_text}"
                 requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "Lead Match!", "Priority": "high"})
                 add_log(f"Alert Sent: {city}")
