@@ -7,6 +7,8 @@ import re
 import random
 import time
 from datetime import datetime
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse, parse_qs
 
 app = Flask(__name__)
 CORS(app)
@@ -14,10 +16,7 @@ CORS(app)
 # Connect to Redis
 r = redis.from_url(os.environ.get('REDIS_URL'), decode_responses=True)
 
-# IndiaMart Mobile Constants
-DEFAULT_SEARCH_QUERY = "cocopeat block"
-# Using the exact mobile URL from your screenshot
-MOBILE_API_URL = "https://m.indiamart.com/ajaxrequest/identified/buyleads/bl/search"
+DEFAULT_SEARCH_URL = "https://trade.indiamart.com/buyersearch.mp?ss=cocopeat+block&src=as-popular%7Ckwd%3Dcocopeat+blo%7Cpos%3D1%7Ccat%3D-2%7Cmcat%3D-2%7Ckwd_len%3D12%7Ckwd_cnt%3D2"
 
 @app.route('/', methods=['GET'])
 def home():
@@ -40,7 +39,7 @@ def get_status():
         logs = r.lrange("monitor_logs", 0, -1)
         min_value = int(r.get("config_min_value") or 300000)
         min_qty_kg = int(r.get("config_min_qty_kg") or 10000)
-        search_query = r.get("config_search_query") or DEFAULT_SEARCH_QUERY
+        search_query = r.get("config_search_query") or "cocopeat block"
     except Exception as e:
         return jsonify({"error": "Redis error", "details": str(e)}), 500
     return jsonify({
@@ -103,12 +102,12 @@ def run_cron():
     if not is_manual and secret_key and request.args.get("key") != secret_key:
         return "Unauthorized", 401
     
-    # Safety Cooldown: Don't scan more than once every 3 minutes
+    # Safety Cooldown: Don't scan more than once every 2 minutes
     last_run_timestamp = r.get("last_run_timestamp")
     current_time = int(time.time())
-    if last_run_timestamp and (current_time - int(last_run_timestamp) < 180):
+    if last_run_timestamp and (current_time - int(last_run_timestamp) < 120):
         if is_manual:
-            add_log("Scan too frequent! Wait 3 mins.")
+            add_log("Too frequent! Wait 2 mins.")
             return "Cooldown active", 200
         return "Too early", 200
 
@@ -119,27 +118,25 @@ def run_cron():
 
     min_val_limit = int(r.get("config_min_value") or 300000)
     min_qty_limit = int(r.get("config_min_qty_kg") or 10000)
-    search_query = r.get("config_search_query") or DEFAULT_SEARCH_QUERY
+    search_query = r.get("config_search_query") or "cocopeat block"
+
+    # Construct the URL
+    url = f"https://trade.indiamart.com/buyersearch.mp?ss={search_query.replace(' ', '+')}&src=as-popular%7Ckwd%3Dcocopeat+blo%7Cpos%3D1%7Ccat%3D-2%7Cmcat%3D-2%7Ckwd_len%3D12%7Ckwd_cnt%3D2"
 
     try:
-        add_log(f"Scanning for: {search_query}")
+        add_log(f"Scraping Desktop: {search_query}")
         
         user_agents = [
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
-            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36",
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-            "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         ]
 
         headers = {
             "User-Agent": random.choice(user_agents),
-            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Referer": f"https://m.indiamart.com/bl/search.php?s={search_query.replace(' ', '+')}",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-            "X-Requested-With": "XMLHttpRequest",
+            "Referer": "https://trade.indiamart.com/",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache"
         }
@@ -148,83 +145,75 @@ def run_cron():
         if cookie:
             headers["Cookie"] = cookie
 
-        params = {
-            "q": search_query,
-            "start": 0,
-            "rows": 20,
-            "src": "DirectSearch",
-            "_": int(datetime.now().timestamp() * 1000) # Anti-cache cachebuster
-        }
-        
-        response = requests.get(MOBILE_API_URL, params=params, headers=headers, timeout=25)
+        response = requests.get(url, headers=headers, timeout=30)
         
         if response.status_code == 429:
-            add_log("Rate limited. Waiting 5s for retry...")
-            time.sleep(5)
-            headers["User-Agent"] = random.choice(user_agents) # Try another identity
-            response = requests.get(MOBILE_API_URL, params=params, headers=headers, timeout=25)
-            
-            if response.status_code == 429:
-                add_log("Still rate limited. Please slow down cron!")
-                return "Rate Limited", 200
+            add_log("Error 429: Rate Limited.")
+            return "Rate Limited", 200
             
         if response.status_code != 200:
             add_log(f"IndiaMart Error {response.status_code}.")
             return f"Error {response.status_code}", 200
 
-        data = response.json()
-        # The API returns results in 'DisplayList' or 'data'
-        results = data.get("DisplayList") or data.get("data") or []
+        soup = BeautifulSoup(response.text, 'html.parser')
+        cards = soup.find_all(class_='TRA_card')
         
-        # Diagnostics for "Found 0 leads"
-        if not results:
-            keys = list(data.keys())
-            msg = data.get("message") or "No message"
-            add_log(f"0 results. Keys: {keys}")
-            if msg != "No message": add_log(f"IM Msg: {msg}")
-            if "login" in str(data).lower(): add_log("Cookie expired?")
-
-        add_log(f"Found {len(results)} leads.")
+        if not cards:
+            # Try a broader search if the specific class isn't found
+            cards = soup.select('[class*="card"]')
+            
+        add_log(f"Found {len(cards)} cards on page.")
         
         ntfy_topic = r.get("ntfy_topic")
         new_leads_count = 0
         
-        if results:
-            first_lead = results[0]
-            add_log(f"ALL Keys: {list(first_lead.keys())}")
-
-        for lead in results:
-            # Map confirmed fields from diagnostic logs
-            display_id = lead.get("ETO_OFR_ID") or lead.get("DISPLAY_ID") or lead.get("display_id")
+        for card in cards:
+            text = card.get_text(separator=' ', strip=True)
+            
+            # Extract Lead ID from link
+            link_el = card.find('a', href=True)
+            if not link_el: continue
+            
+            href = link_el['href']
+            parsed_url = urlparse(href)
+            params = parse_qs(parsed_url.query)
+            display_id = params.get('offer', [None])[0]
+            
             if not display_id or r.sismember("seen_leads", display_id): continue
-                
-            qty_text = str(lead.get("eto_ofr_buyer_tot_requirement") or lead.get("ETO_OFR_QTY") or "0")
-            val_text = str(lead.get("ordervalue") or lead.get("PROBABLE_ORDER_VALUE") or "0")
+            
+            # Extract Quantity and Value using regex from the card text
+            qty_match = re.search(r"Quantity\s*:\s*([^:]+?)(?=Probable|Member|Mobile|$)", text, re.I)
+            val_match = re.search(r"Probable Order Value\s*:\s*([^:]+?)(?=Member|Mobile|$)", text, re.I)
+            
+            qty_text = qty_match.group(1).strip() if qty_match else "0"
+            val_text = val_match.group(1).strip() if val_match else "0"
             
             total_qty = parse_quantity(qty_text)
             max_value = parse_value(val_text)
 
-            # Match if it meets either requirement
             matches_qty = (total_qty >= min_qty_limit)
             matches_val = (max_value >= min_val_limit)
 
             if matches_qty or matches_val:
-                title = lead.get("ETO_OFR_TITLE") or lead.get("SUBJECT") or lead.get("subject") or "Lead"
-                city = lead.get("GLUSR_CITY") or lead.get("CITY") or "Unknown"
+                title = link_el.get_text().strip() or "New Lead"
+                # City is usually after the title in the card
+                city_match = re.search(r"(?:Yesterday|hr ago|hrs ago|min ago)\s+(.*)", text)
+                city = city_match.group(1).strip().split(' ')[0] if city_match else "Unknown"
+                
                 msg = f"Product: {title}\nLocation: {city}\nQty: {qty_text}\nValue: {val_text}"
-                requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "Lead Match!", "Priority": "high"})
+                requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "Desktop Match!", "Priority": "high"})
                 add_log(f"Alert Sent: {city}")
                 new_leads_count += 1
 
             r.sadd("seen_leads", display_id)
         
-        # Set TTL for seen_leads to 7 days
         r.expire("seen_leads", 604800)
-
         r.set("last_check_time", datetime.now().strftime('%H:%M:%S'))
         return "OK", 200
     except Exception as e:
-        add_log(f"Scan failed: {str(e)[:50]}")
+        add_log(f"Scrape failed: {str(e)[:50]}")
+        import traceback
+        print(traceback.format_exc())
         return f"Error: {str(e)}", 200
 
 if __name__ == '__main__':
