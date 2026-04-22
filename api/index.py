@@ -5,6 +5,7 @@ import redis
 import requests
 import re
 import random
+import time
 from datetime import datetime
 
 app = Flask(__name__)
@@ -102,8 +103,19 @@ def run_cron():
     if not is_manual and secret_key and request.args.get("key") != secret_key:
         return "Unauthorized", 401
     
+    # Safety Cooldown: Don't scan more than once every 3 minutes
+    last_run_timestamp = r.get("last_run_timestamp")
+    current_time = int(time.time())
+    if last_run_timestamp and (current_time - int(last_run_timestamp) < 180):
+        if is_manual:
+            add_log("Scan too frequent! Wait 3 mins.")
+            return "Cooldown active", 200
+        return "Too early", 200
+
     if not is_manual and r.get("monitor_status") != "true":
         return "Monitor is OFF", 200
+
+    r.set("last_run_timestamp", str(current_time))
 
     min_val_limit = int(r.get("config_min_value") or 300000)
     min_qty_limit = int(r.get("config_min_qty_kg") or 10000)
@@ -147,8 +159,14 @@ def run_cron():
         response = requests.get(MOBILE_API_URL, params=params, headers=headers, timeout=25)
         
         if response.status_code == 429:
-            add_log("Error 429: Rate Limited! Slow down cron.")
-            return "Rate Limited", 200
+            add_log("Rate limited. Waiting 5s for retry...")
+            time.sleep(5)
+            headers["User-Agent"] = random.choice(user_agents) # Try another identity
+            response = requests.get(MOBILE_API_URL, params=params, headers=headers, timeout=25)
+            
+            if response.status_code == 429:
+                add_log("Still rate limited. Please slow down cron!")
+                return "Rate Limited", 200
             
         if response.status_code != 200:
             add_log(f"IndiaMart Error {response.status_code}.")
