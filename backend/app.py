@@ -11,6 +11,7 @@ def get_status():
         "isRunning": monitor.is_running,
         "lastStatus": monitor.last_status,
         "ntfyTopic": NTFY_TOPIC,
+        "logs": [],
         "config": {
             "minValue": monitor.min_value,
             "minQtyKg": monitor.min_qty_kg
