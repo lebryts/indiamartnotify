@@ -191,15 +191,15 @@ def run_cron():
         
         if results:
             first_lead = results[0]
-            add_log(f"Lead keys: {list(first_lead.keys())[:10]}")
+            add_log(f"ALL Keys: {list(first_lead.keys())}")
 
         for lead in results:
             # Try multiple variations for robustness
-            display_id = lead.get("DISPLAY_ID") or lead.get("display_id") or lead.get("DISPLAYID") or lead.get("displayid")
+            display_id = lead.get("DISPLAY_ID") or lead.get("display_id") or lead.get("DISPLAYID") or lead.get("displayid") or lead.get("QUERY_ID")
             if not display_id or r.sismember("seen_leads", display_id): continue
                 
-            qty_text = str(lead.get("QUANTITY") or lead.get("quantity") or "0")
-            val_text = str(lead.get("PROBABLE_ORDER_VALUE") or lead.get("probable_order_value") or "0")
+            qty_text = str(lead.get("QUANTITY") or lead.get("quantity") or lead.get("eto_ofr_buyer_tot_requirement") or "0")
+            val_text = str(lead.get("PROBABLE_ORDER_VALUE") or lead.get("probable_order_value") or lead.get("ORD_VAL") or "0")
             
             total_qty = parse_quantity(qty_text)
             max_value = parse_value(val_text)
@@ -210,8 +210,8 @@ def run_cron():
             matches_val = (max_value >= min_val_limit)
 
             if matches_qty or matches_val:
-                title = lead.get("SUBJECT") or lead.get("subject") or "Lead"
-                city = lead.get("CITY") or lead.get("city") or "Unknown"
+                title = lead.get("SUBJECT") or lead.get("subject") or lead.get("ETO_OFR_GLCAT_MCAT_NAME") or "Lead"
+                city = lead.get("CITY") or lead.get("city") or lead.get("GLUSR_CITY") or "Unknown"
                 msg = f"Product: {title}\nLocation: {city}\nQty: {qty_text}\nValue: {val_text}"
                 requests.post(f"https://ntfy.sh/{ntfy_topic}", data=msg.encode('utf-8'), headers={"Title": "Lead Match!", "Priority": "high"})
                 add_log(f"Alert Sent: {city}")
