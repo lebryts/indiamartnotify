@@ -268,6 +268,12 @@
 
             <div class="settings-grid">
                 <div class="setting-item">
+                    <span class="setting-label">Search Query</span>
+                    <div class="input-group">
+                        <input type="text" id="searchQueryInput" placeholder="e.g. cocopeat block">
+                    </div>
+                </div>
+                <div class="setting-item">
                     <span class="setting-label">Min Quality / Tonnage (Tons)</span>
                     <div class="input-group">
                         <input type="number" id="minQtyInput" placeholder="e.g. 10">
@@ -282,6 +288,8 @@
                     </div>
                 </div>
                 <button id="saveConfigBtn" class="save-btn">Save Configuration</button>
+                <button id="manualScanBtn" class="save-btn"
+                    style="background: #064e3b; border: 1px solid #10b981; margin-top: 0.5rem;">Run Manual Scan</button>
                 <button id="testNotifyBtn" class="save-btn"
                     style="background: #1e293b; border: 1px solid var(--primary); margin-top: 0.5rem;">Test
                     Notifications</button>
@@ -335,6 +343,9 @@
                 if (document.activeElement !== document.getElementById('minValueInput')) {
                     document.getElementById('minValueInput').value = data.config.minValue / 100000;
                 }
+                if (document.activeElement !== document.getElementById('searchQueryInput')) {
+                    document.getElementById('searchQueryInput').value = data.config.searchQuery || '';
+                }
 
                 lucide.createIcons();
             } catch (e) {
@@ -363,17 +374,19 @@
             const btn = document.getElementById('saveConfigBtn');
             const qty = parseFloat(document.getElementById('minQtyInput').value);
             const val = parseFloat(document.getElementById('minValueInput').value);
-
+            const query = document.getElementById('searchQueryInput').value;
+            
             btn.innerText = 'Saving...';
             btn.disabled = true;
-
+            
             try {
                 await fetch(`${API_URL}/config`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         minQtyKg: qty * 1000,
-                        minValue: val * 100000
+                        minValue: val * 100000,
+                        searchQuery: query
                     })
                 });
                 alert("Configuration saved successfully!");
@@ -381,6 +394,28 @@
                 alert("Error saving config");
             } finally {
                 btn.innerText = 'Save Configuration';
+                btn.disabled = false;
+                updateStatus();
+            }
+        });
+
+        document.getElementById('manualScanBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('manualScanBtn');
+            const originalText = btn.innerText;
+            btn.innerText = 'Scanning...';
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${API_URL}/cron?manual=true`);
+                const text = await res.text();
+                if (res.ok) {
+                    alert("Scan complete! Check logs below.");
+                } else {
+                    alert("Scan failed: " + text);
+                }
+            } catch (e) {
+                alert("Error triggering scan");
+            } finally {
+                btn.innerText = originalText;
                 btn.disabled = false;
                 updateStatus();
             }
