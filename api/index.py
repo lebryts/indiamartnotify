@@ -189,9 +189,13 @@ def run_cron():
         ntfy_topic = r.get("ntfy_topic")
         new_leads_count = 0
         
+        if results:
+            first_lead = results[0]
+            add_log(f"Lead keys: {list(first_lead.keys())[:10]}")
+
         for lead in results:
-            # Try both uppercase and lowercase for robustness
-            display_id = lead.get("DISPLAY_ID") or lead.get("display_id") or lead.get("DISPLAYID")
+            # Try multiple variations for robustness
+            display_id = lead.get("DISPLAY_ID") or lead.get("display_id") or lead.get("DISPLAYID") or lead.get("displayid")
             if not display_id or r.sismember("seen_leads", display_id): continue
                 
             qty_text = str(lead.get("QUANTITY") or lead.get("quantity") or "0")
@@ -200,8 +204,10 @@ def run_cron():
             total_qty = parse_quantity(qty_text)
             max_value = parse_value(val_text)
 
-            matches_qty = (min_qty_limit > 0 and total_qty >= min_qty_limit)
-            matches_val = (min_val_limit > 0 and max_value >= min_val_limit)
+            # Match if it meets either requirement
+            # If limit is 0, that filter is effectively disabled (always matches)
+            matches_qty = (total_qty >= min_qty_limit)
+            matches_val = (max_value >= min_val_limit)
 
             if matches_qty or matches_val:
                 title = lead.get("SUBJECT") or lead.get("subject") or "Lead"
