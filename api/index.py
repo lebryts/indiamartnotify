@@ -173,13 +173,16 @@ def run_cron():
             return f"Error {response.status_code}", 200
 
         data = response.json()
-        # Some responses might be errors wrapped in JSON
-        if not data.get("data") and data.get("message"):
-            add_log(f"IM Msg: {data.get('message')}")
-            if "login" in data.get("message").lower():
-                add_log("Cookie probably expired!")
-
         results = data.get("data", [])
+        
+        # Diagnostics for "Found 0 leads"
+        if not results:
+            keys = list(data.keys())
+            msg = data.get("message") or "No message"
+            add_log(f"0 results. Keys: {keys}")
+            if msg != "No message": add_log(f"IM Msg: {msg}")
+            if "login" in str(data).lower(): add_log("Cookie expired?")
+
         add_log(f"Found {len(results)} leads.")
         
         ntfy_topic = r.get("ntfy_topic")
